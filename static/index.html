@@ -1,0 +1,235 @@
+<!-- static/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QIU Contact Manager</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        table { width: 100%; margin-top: 20px; }
+        th { cursor: pointer; }
+        .button-container { display: flex; gap: 5px; }
+        .modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            justify-content: center; 
+            align-items: center; 
+        }
+        .modal-content { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 5px; 
+            max-width: 450px; 
+            text-align: center; 
+        }
+        #qrcode { margin: 20px auto; }
+        #qrcode img { width: 400px; height: 400px; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>QIU Contact Manager</h1>
+        <input type="file" id="csvFile" accept=".csv" />
+        <button id="upload" class="contrast">Upload CSV</button>
+        <button id="downloadAllQr" class="contrast">Download All QR Codes</button>
+        <table>
+            <thead>
+                <tr>
+                    <th data-sort="name">Name</th>
+                    <th data-sort="email">Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="employeeTable"></tbody>
+        </table>
+    </main>
+    <div id="qrModal" class="modal">
+        <div class="modal-content">
+            <h3>Contact Details</h3>
+            <div id="qrDetails"></div>
+            <div id="qrcode"></div>
+            <button id="downloadQr" class="button">Download QR</button>
+            <button id="closeModal" class="button secondary">Close</button>
+        </div>
+    </div>
+    <script>
+        const tableBody = document.getElementById('employeeTable');
+        const uploadBtn = document.getElementById('upload');
+        const csvFileInput = document.getElementById('csvFile');
+        const qrModal = document.getElementById('qrModal');
+        const qrDetails = document.getElementById('qrDetails');
+        const qrCodeDiv = document.getElementById('qrcode');
+        const closeModal = document.getElementById('closeModal');
+        const downloadAllQrBtn = document.getElementById('downloadAllQr');
+        let employees = [];
+
+        // Function to create vCard (for download only)
+        function createVcard(emp) {
+            const nameParts = emp.name ? emp.name.split(' ') : [''];
+            const lastName = nameParts.length > 1 ? nameParts.pop() : '';
+            const firstName = nameParts.join(' ') || 'Unknown';
+            const title = [emp.designation || '', emp.faculty || '', emp.school || '']
+                .filter(part => part !== '')
+                .join(' | ');
+            const vcardLines = [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                `N:${lastName};${firstName};;;`,
+                `FN:${emp.name || 'Unknown'}`,
+                title ? `TITLE:${title}` : '',
+                emp.email ? `EMAIL:${emp.email}` : '',
+                emp.mobile ? `TEL;TYPE=CELL:${emp.mobile}` : '',
+                'END:VCARD'
+            ].filter(line => line !== '');
+            const vcard = vcardLines.join('\r\n');
+            console.log('vCard length:', vcard.length, '\nContent:\n', vcard);
+            return vcard;
+        }
+
+        // Load employees from server
+        async function loadEmployees() {
+            try {
+                const response = await fetch('/api/employees');
+                if (!response.ok) throw new Error('Failed to fetch employees');
+                employees = await response.json();
+                displayTable();
+            } catch (error) {
+                console.error('Error loading employees:', error);
+            }
+        }
+
+        // Display table
+        function displayTable() {
+            tableBody.innerHTML = '';
+            employees.forEach(emp => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${emp.name || 'N/A'}</td>
+                    <td>${emp.email || 'N/A'}</td>
+                    <td class="button-container">
+                        <button class="button" onclick="downloadVcard('${emp.name || 'Unknown'}')">Add to Phone</button>
+                        <button class="button secondary" onclick="generateQR('${emp.name || 'Unknown'}')">Generate QR</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Download vCard
+        function downloadVcard(name) {
+            const emp = employees.find(e => e.name === name);
+            if (!emp) {
+                console.error(`Employee not found: ${name}`);
+                return;
+            }
+            const vcard = createVcard(emp);
+            const blob = new Blob([vcard], { type: 'text/vcard' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${emp.name ? emp.name.replace(/[^a-z0-9 ]/gi, '').trim() : 'unknown'}.vcf`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Generate QR code in modal
+        function generateQR(name) {
+            const emp = employees.find(e => e.name === name);
+            if (!emp) {
+                console.error(`Employee not found: ${name}`);
+                return;
+            }
+            const vcard = createVcard(emp);
+            console.log('vCard length:', vcard.length, '\nContent:\n', vcard);
+
+            qrDetails.innerHTML = `
+                <p><strong>Name:</strong> ${emp.name || 'N/A'}</p>
+                <p><strong>Email:</strong> ${emp.email || 'N/A'}</p>
+                <p><strong>Mobile:</strong> ${emp.mobile || 'N/A'}</p>
+                <p><strong>Title:</strong> ${[emp.designation || '', emp.faculty || '', emp.school || ''].filter(part => part !== '').join(' | ') || 'N/A'}</p>
+            `;
+
+            qrCodeDiv.innerHTML = `<img src="/generate_qr/${encodeURIComponent(name)}" alt="QR Code">`;
+            qrModal.style.display = 'flex';
+
+            document.getElementById('downloadQr').onclick = () => {
+                const img = qrCodeDiv.querySelector('img');
+                if (img) {
+                    const url = img.src;
+                    fetch(url)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const link = document.createElement('a');
+                            link.href = URL.createObjectURL(blob);
+                            link.download = `${emp.name ? emp.name.replace(/[^a-z0-9 ]/gi, '').trim() : 'unknown'}_qr.png`;
+                            link.click();
+                            URL.revokeObjectURL(link.href);
+                        });
+                } else {
+                    console.error('QR image not found');
+                }
+            };
+        }
+
+        // Download all QR codes
+        downloadAllQrBtn.addEventListener('click', () => {
+            window.location.href = '/download_all_qr';
+        });
+
+        // Close modal
+        closeModal.addEventListener('click', () => {
+            qrModal.style.display = 'none';
+            qrCodeDiv.innerHTML = '';
+        });
+
+        // Sorting functionality
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const key = th.dataset.sort;
+                const rows = Array.from(tableBody.querySelectorAll('tr'));
+                const ascending = th.classList.toggle('asc');
+                rows.sort((a, b) => {
+                    const aVal = a.cells[key === 'name' ? 0 : 1].textContent;
+                    const bVal = b.cells[key === 'name' ? 0 : 1].textContent;
+                    return ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                });
+                rows.forEach(row => tableBody.appendChild(row));
+            });
+        });
+
+        // Upload CSV
+        uploadBtn.addEventListener('click', async () => {
+            const file = csvFileInput.files[0];
+            if (!file) {
+                alert('Please select a CSV file');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error('Upload failed');
+                const result = await response.json();
+                alert(`CSV processed: ${result.inserted} new employees added, ${result.updated} employees updated`);
+                await loadEmployees();
+            } catch (error) {
+                console.error('Error uploading CSV:', error);
+                alert('Failed to upload CSV');
+            }
+        });
+
+        // Initial load
+        loadEmployees();
+    </script>
+</body>
+</html>
