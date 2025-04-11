@@ -12,26 +12,26 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file (local only)
 load_dotenv()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.secret_key = os.getenv('FLASK_SECRET_KEY')  # Load secret key from env
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 # Load and hash the app password from env
 APP_PASSWORD = os.getenv('APP_PASSWORD')
 if not APP_PASSWORD:
-    raise ValueError("APP_PASSWORD must be set in .env or environment variables")
+    raise ValueError("APP_PASSWORD must be set in environment variables")
 PASSWORD_HASH = generate_password_hash(APP_PASSWORD)
 
 def get_db_connection():
     conn = psycopg2.connect(
-        dbname="qiu_contacts",
-        user="postgres",
-        password=os.getenv('DB_PASSWORD'),  # Load DB password from env
-        host="localhost",
-        port="5432",
+        dbname=os.getenv('DB_NAME'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        host=os.getenv('DB_HOST'),
+        port=os.getenv('DB_PORT', '5432'),  # Default to 5432 if not set
         cursor_factory=RealDictCursor
     )
     return conn
@@ -282,4 +282,4 @@ def send_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
