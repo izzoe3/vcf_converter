@@ -1,4 +1,4 @@
-# app.py
+# app.py (unchanged from Render-ready version, just verifying)
 from flask import Flask, request, jsonify, send_from_directory, send_file, session, redirect, url_for, render_template_string
 import csv
 from io import StringIO, BytesIO
@@ -12,14 +12,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# Load environment variables from .env file (local only)
 load_dotenv()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-# Load and hash the app password from env
 APP_PASSWORD = os.getenv('APP_PASSWORD')
 if not APP_PASSWORD:
     raise ValueError("APP_PASSWORD must be set in environment variables")
@@ -31,7 +29,7 @@ def get_db_connection():
         user=os.getenv('DB_USER'),
         password=os.getenv('DB_PASSWORD'),
         host=os.getenv('DB_HOST'),
-        port=os.getenv('DB_PORT', '5432'),  # Default to 5432 if not set
+        port=os.getenv('DB_PORT', '5432'),
         cursor_factory=RealDictCursor
     )
     return conn
